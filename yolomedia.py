@@ -155,8 +155,13 @@ AUDIO_FILES = {
 }
 GUIDANCE_INTERVAL_SEC = 1.5  # 引导播报间隔
 
-# 初始化pygame音频
-pygame.mixer.init()
+# 初始化 pygame 音频（无音频设备时降级，避免导入阶段崩溃）
+PYGAME_AUDIO_OK = True
+try:
+    pygame.mixer.init()
+except Exception as e:
+    PYGAME_AUDIO_OK = False
+    print(f"[YOLOMEDIA] pygame mixer init failed, disable local mixer audio: {e}", flush=True)
 
 # ========= 窗口 =========
 WINDOW = "YOLO Seg + Flow Polygon (Peri-Relock) (Grab Guidance)"
