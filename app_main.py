@@ -121,7 +121,7 @@ def load_navigation_models():
     global yolo_seg_model, obstacle_detector
 
     try:
-        seg_model_path = os.getenv("BLIND_PATH_MODEL", r"C:\Users\Administrator\Desktop\rebuild1002\model\yolo-seg.pt")
+        seg_model_path = os.getenv("BLIND_PATH_MODEL", os.path.join("model", "yolo-seg.pt"))
         #print(f"[NAVIGATION] 尝试加载模型: {seg_model_path}")
 
         if os.path.exists(seg_model_path):
@@ -154,7 +154,7 @@ def load_navigation_models():
             print(f"[NAVIGATION] 请检查文件路径是否正确")
             
         # 【修改开始】使用 ObstacleDetectorClient 替代直接的 YOLO
-        obstacle_model_path = os.getenv("OBSTACLE_MODEL", r"C:\Users\Administrator\Desktop\rebuild1002\model\yoloe-11l-seg.pt")
+        obstacle_model_path = os.getenv("OBSTACLE_MODEL", os.path.join("model", "yoloe-11l-seg.pt"))
         print(f"[NAVIGATION] 尝试加载障碍物检测模型: {obstacle_model_path}")
         
         if os.path.exists(obstacle_model_path):
@@ -1286,7 +1286,12 @@ async def on_startup_init_audio():
 @app.on_event("startup")
 async def on_startup():
     loop = asyncio.get_running_loop()
-    await loop.create_datagram_endpoint(lambda: UDPProto(), local_addr=(UDP_IP, UDP_PORT))
+    try:
+        await loop.create_datagram_endpoint(lambda: UDPProto(), local_addr=(UDP_IP, UDP_PORT))
+    except PermissionError as e:
+        print(f"[UDP] 无法绑定 {UDP_IP}:{UDP_PORT}，已禁用 IMU UDP 接收: {e}")
+    except OSError as e:
+        print(f"[UDP] UDP 启动失败，已禁用 IMU UDP 接收: {e}")
 
 @app.on_event("shutdown")
 async def on_shutdown():
