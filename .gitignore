@@ -1,0 +1,43 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+
+# ---- Environment ----
+.env
+.env.local
+
+# ---- Models (download separately, see README) ----
+model/*.pt
+model/*.task
+model/*.onnx
+!model/.gitkeep
+
+# ---- Recordings & output ----
+recordings/
+*.avi
+*.wav
+
+# ---- IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Conda / venv ----
+.conda/
+venv/
+env/
+
+# ---- Docker ----
+docker-compose.override.yml
