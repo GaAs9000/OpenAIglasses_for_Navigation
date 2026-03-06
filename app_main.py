@@ -23,9 +23,6 @@ import numpy as np
 from ultralytics import YOLO
 from obstacle_detector_client import ObstacleDetectorClient
 
-import torch  # 添加这行
-
-
 import mediapipe as mp
 import bridge_io
 import threading
@@ -47,9 +44,9 @@ except Exception:
 # ---- DashScope ASR 基础 ----
 from dashscope import audio as dash_audio  # 若未安装，会在原项目里抛错提示
 
-API_KEY = os.getenv("DASHSCOPE_API_KEY", "sk-a9440db694924559ae4ebdc2023d2b9a")
+API_KEY = os.getenv("DASHSCOPE_API_KEY")
 if not API_KEY:
-    raise RuntimeError("未设置 DASHSCOPE_API_KEY")
+    raise RuntimeError("未设置 DASHSCOPE_API_KEY（请在环境变量或 .env 中配置）")
 
 MODEL        = "paraformer-realtime-v2"
 SAMPLE_RATE  = 16000
@@ -105,6 +102,7 @@ blind_path_navigator = None
 navigation_active = False
 yolo_seg_model = None
 obstacle_detector = None
+navigation_model_ready = False
 
 # 【新增】过马路导航相关全局变量
 cross_street_navigator = None
@@ -119,26 +117,26 @@ omni_previous_nav_state = None  # 保存omni激活前的导航状态，用于恢
 def load_navigation_models():
     """加载盲道导航所需的模型"""
     global yolo_seg_model, obstacle_detector
+    yolo_seg_model = None
+    obstacle_detector = None
 
     try:
         seg_model_path = os.getenv("BLIND_PATH_MODEL", os.path.join("model", "yolo-seg.pt"))
-        #print(f"[NAVIGATION] 尝试加载模型: {seg_model_path}")
+        print(f"[NAVIGATION] 尝试加载盲道分割模型: {seg_model_path}")
 
         if os.path.exists(seg_model_path):
-            print(f"[NAVIGATION] 模型文件存在，开始加载...")
-            yolo_seg_model = YOLO(seg_model_path)
-
-            # 强制放到 GPU
-            if torch.cuda.is_available():
-                yolo_seg_model.to("cuda")
-                print(f"[NAVIGATION] 盲道分割模型加载成功并放到GPU: {yolo_seg_model.device}")
-            else:
-                print("[NAVIGATION] CUDA不可用，模型仍在CPU")
-
-            # 测试模型是否能正常运行
             try:
+                print(f"[NAVIGATION] 模型文件存在，开始加载...")
+                yolo_seg_model = YOLO(seg_model_path)
+                if torch.cuda.is_available():
+                    yolo_seg_model.to("cuda")
+                    print(f"[NAVIGATION] 盲道分割模型加载成功并放到GPU: {yolo_seg_model.device}")
+                else:
+                    print("[NAVIGATION] CUDA不可用，模型仍在CPU")
+
+                # 测试模型是否能正常运行
                 test_img = np.zeros((640, 640, 3), dtype=np.uint8)
-                results = yolo_seg_model.predict(
+                yolo_seg_model.predict(
                     test_img,
                     device="cuda" if torch.cuda.is_available() else "cpu",
                     verbose=False
@@ -147,7 +145,8 @@ def load_navigation_models():
                 if hasattr(yolo_seg_model, 'names'):
                     print(f"[NAVIGATION] 模型类别: {yolo_seg_model.names}")
             except Exception as e:
-                print(f"[NAVIGATION] 模型测试失败: {e}")
+                print(f"[NAVIGATION] 盲道分割模型加载/测试失败: {e}")
+                yolo_seg_model = None
         else:
             print(f"[NAVIGATION] 错误：找不到模型文件: {seg_model_path}")
             print(f"[NAVIGATION] 当前工作目录: {os.getcwd()}")
@@ -217,16 +216,21 @@ def load_navigation_models():
                 obstacle_detector = None
         else:
             print(f"[NAVIGATION] 警告：找不到障碍物检测模型文件: {obstacle_model_path}")
-        
+
     except Exception as e:
         print(f"[NAVIGATION] 模型加载失败: {e}")
         import traceback
         traceback.print_exc()
 
+    if yolo_seg_model is None:
+        print("[NAVIGATION] 关键模型缺失：已禁用盲道/过马路导航，仅保留基础相机与对话功能")
+        return False
+    return True
+
 # 在程序启动时加载模型
 print("[NAVIGATION] 开始加载导航模型...")
-load_navigation_models()
-print(f"[NAVIGATION] 模型加载完成 - yolo_seg_model: {yolo_seg_model is not None}")
+navigation_model_ready = load_navigation_models()
+print(f"[NAVIGATION] 模型加载完成 - yolo_seg_model: {yolo_seg_model is not None}, ready={navigation_model_ready}")
 
 # 【新增】启动同步录制
 print("[RECORDER] 启动同步录制系统...")
@@ -409,7 +413,7 @@ def stop_yolomedia():
 # ========= 自定义的 start_ai_with_text，支持识别特殊命令 =========
 async def start_ai_with_text_custom(user_text: str):
     """扩展版的AI启动函数，支持识别特殊命令"""
-    global navigation_active, blind_path_navigator, cross_street_active, cross_street_navigator, orchestrator
+    global navigation_active, blind_path_navigator, cross_street_active, cross_street_navigator, orchestrator, yolo_seg_model
     
     # 【修改】在导航模式和红绿灯检测模式下，只有特定词才进入omni对话
     if orchestrator:
@@ -433,6 +437,11 @@ async def start_ai_with_text_custom(user_text: str):
     
     # 【修改】检查是否是过马路相关命令 - 使用orchestrator控制
     if "开始过马路" in user_text or "帮我过马路" in user_text:
+        if yolo_seg_model is None:
+            print("[CROSS_STREET] 缺少分割模型，拒绝启动过马路模式")
+            play_voice_text("导航模型未加载，请检查模型文件。")
+            await ui_broadcast_final("[系统] 导航模型未加载，请检查 BLIND_PATH_MODEL")
+            return
         # 【新增】如果正在找物品，先停止
         if yolomedia_running:
             stop_yolomedia()
@@ -499,6 +508,11 @@ async def start_ai_with_text_custom(user_text: str):
     
     # 【修改】检查是否是导航相关命令 - 使用orchestrator控制
     if "开始导航" in user_text or "盲道导航" in user_text or "帮我导航" in user_text:
+        if yolo_seg_model is None:
+            print("[NAVIGATION] 缺少分割模型，拒绝启动盲道导航")
+            play_voice_text("导航模型未加载，请检查模型文件。")
+            await ui_broadcast_final("[系统] 导航模型未加载，请检查 BLIND_PATH_MODEL")
+            return
         # 【新增】如果正在找物品，先停止
         if yolomedia_running:
             stop_yolomedia()
@@ -872,8 +886,12 @@ async def ws_camera_esp(ws: WebSocket):
     
     # 【新增】初始化盲道导航器
     if blind_path_navigator is None and yolo_seg_model is not None:
-        blind_path_navigator = BlindPathNavigator(yolo_seg_model, obstacle_detector)
-        print("[NAVIGATION] 盲道导航器已初始化")
+        try:
+            blind_path_navigator = BlindPathNavigator(yolo_seg_model, obstacle_detector)
+            print("[NAVIGATION] 盲道导航器已初始化")
+        except Exception as e:
+            blind_path_navigator = None
+            print(f"[NAVIGATION] 盲道导航器初始化失败: {e}")
     else:
         if blind_path_navigator is not None:
             print("[NAVIGATION] 导航器已存在，无需重新初始化")
@@ -883,12 +901,16 @@ async def ws_camera_esp(ws: WebSocket):
     # 【新增】初始化过马路导航器
     if cross_street_navigator is None:
         if yolo_seg_model:
-            cross_street_navigator = CrossStreetNavigator(
-                seg_model=yolo_seg_model,
-                coco_model=None,  # 不使用交通灯检测
-                obs_model=None    # 暂时也不用障碍物检测，让它更快
-            )
-            print("[CROSS_STREET] 过马路导航器已初始化（简化版 - 仅斑马线检测）")
+            try:
+                cross_street_navigator = CrossStreetNavigator(
+                    seg_model=yolo_seg_model,
+                    coco_model=None,  # 不使用交通灯检测
+                    obs_model=None    # 暂时也不用障碍物检测，让它更快
+                )
+                print("[CROSS_STREET] 过马路导航器已初始化（简化版 - 仅斑马线检测）")
+            except Exception as e:
+                cross_street_navigator = None
+                print(f"[CROSS_STREET] 过马路导航器初始化失败: {e}")
         else:
             print("[CROSS_STREET] 错误：缺少分割模型，无法初始化过马路导航器")
             

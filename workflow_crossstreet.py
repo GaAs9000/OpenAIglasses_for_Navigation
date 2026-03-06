@@ -16,6 +16,7 @@ import cv2
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 # 【移除】from audio_player import play_voice_text - 不在工作流内部播放音频
+from font_utils import load_pil_cjk_font
 
 # 可选：用于更精致的数据面板（与 blindpath 一致）
 try:
@@ -929,18 +930,11 @@ class CrossStreetNavigator:
             bottom_margin = 28
             
             # 计算文字尺寸
+            font = None
             if PIL_AVAILABLE:
                 try:
                     from PIL import Image as PILImage, ImageDraw, ImageFont
-                    # 尝试加载中文字体
-                    font = None
-                    for font_path in ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf"]:
-                        if os.path.exists(font_path):
-                            try:
-                                font = ImageFont.truetype(font_path, font_px)
-                                break
-                            except:
-                                continue
+                    font = load_pil_cjk_font(ImageFont, font_px)
                     if font:
                         bbox = ImageDraw.Draw(PILImage.new('RGB', (1, 1))).textbbox((0, 0), full_text, font=font)
                         tw = max(1, bbox[2] - bbox[0])
@@ -1013,23 +1007,7 @@ class CrossStreetNavigator:
             draw = ImageDraw.Draw(pil_img, "RGBA")
             env_scale = float(os.getenv("AIGLASS_PANEL_SCALE", "0.7"))
             base_font_size = max(10, int(round(14 * env_scale)))
-            font = None
-            font_paths = [
-                "C:/Windows/Fonts/msyh.ttc",
-                "C:/Windows/Fonts/simhei.ttf",
-                "C:/Windows/Fonts/simsun.ttc",
-                "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
-                "/System/Library/Fonts/PingFang.ttc",
-            ]
-            for font_path in font_paths:
-                try:
-                    if os.path.exists(font_path):
-                        font = ImageFont.truetype(font_path, base_font_size)
-                        break
-                except:
-                    continue
-            if font is None:
-                font = ImageFont.load_default()
+            font = load_pil_cjk_font(ImageFont, base_font_size)
 
             y_offset = position[1]
             for key, value in data.items():

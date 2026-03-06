@@ -14,6 +14,7 @@ from ultralytics import YOLO
 import bridge_io
 from audio_player import play_voice_text  # 使用统一的语音播放接口
 import logging
+from font_utils import find_cjk_font_path, load_pil_cjk_font
 
 logger = logging.getLogger(__name__)
 
@@ -115,19 +116,9 @@ def _init_font():
     except Exception:
         _PIL_OK = False
         return
-    candidates = [
-        r"C:\\Windows\\Fonts\\msyh.ttc",
-        r"C:\\Windows\\Fonts\\msyh.ttf",
-        r"C:\\Windows\\Fonts\\simhei.ttf",
-        r"C:\\Windows\\Fonts\\simfang.ttf",
-        r"C:\\Windows\\Fonts\\simsun.ttc",
-        r"C:\\Windows\\Fonts\\simsunb.ttf",
-    ]
-    for p in candidates:
-        if os.path.exists(p):
-            _FONT_PATH = p
-            return
-    _PIL_OK = False
+    _FONT_PATH = find_cjk_font_path()
+    if _FONT_PATH is None:
+        _PIL_OK = False
 
 _init_font()
 
@@ -144,7 +135,7 @@ def draw_text_cn(img_bgr, text, xy, font_size=20, color=(255,255,255), ui_hint=T
     if _PIL_OK and _FONT_PATH:
         try:
             from PIL import Image, ImageDraw, ImageFont
-            font_obj = ImageFont.truetype(_FONT_PATH, font_size)
+            font_obj = load_pil_cjk_font(ImageFont, font_size, extra_candidates=[_FONT_PATH])
             bbox = ImageDraw.Draw(Image.new('RGB', (1,1))).textbbox((0,0), text, font=font_obj)
             tw = max(1, bbox[2] - bbox[0])
             th = max(1, bbox[3] - bbox[1])
@@ -312,7 +303,7 @@ def main(headless: bool = True, stop_event=None):
                             try:
                                 from PIL import Image, ImageDraw, ImageFont
                                 # 使用较大的字体绘制标签
-                                font_obj = ImageFont.truetype(_FONT_PATH, 20)
+                                font_obj = load_pil_cjk_font(ImageFont, 20, extra_candidates=[_FONT_PATH])
                                 # 转换为PIL图像
                                 img_rgb = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
                                 pil_img = Image.fromarray(img_rgb)
@@ -618,5 +609,3 @@ def reset_detection_state():
 
 if __name__ == "__main__":
     main(headless=False)
-
-

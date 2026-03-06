@@ -118,15 +118,20 @@ pip install -r requirements.txt
 
 ### 3. 下载模型文件
 
-将以下模型文件放入 `model/` 目录：
+将以下模型文件放入 `model/` 目录（仓库不包含 `.pt`，因为 GitHub 单文件大小限制）：
 
 | 模型文件 | 用途 | 大小 | 下载链接 |
 |---------|------|------|---------|
-| `yolo-seg.pt` | 盲道分割 | ~50MB | [待补充] |
-| `yoloe-11l-seg.pt` | 开放词汇检测 | ~80MB | [待补充] |
-| `shoppingbest5.pt` | 物品识别 | ~30MB | [待补充] |
-| `trafficlight.pt` | 红绿灯检测 | ~20MB | [待补充] |
+| `yolo-seg.pt` | 盲道分割 | ~50MB | [ModelScope: archifancy/AIGlasses_for_navigation](https://www.modelscope.cn/models/archifancy/AIGlasses_for_navigation) |
+| `yoloe-11l-seg.pt` | 开放词汇检测 | ~80MB | [ModelScope: archifancy/AIGlasses_for_navigation](https://www.modelscope.cn/models/archifancy/AIGlasses_for_navigation) |
+| `shoppingbest5.pt` | 物品识别 | ~30MB | [ModelScope: archifancy/AIGlasses_for_navigation](https://www.modelscope.cn/models/archifancy/AIGlasses_for_navigation) |
+| `trafficlight.pt` | 红绿灯检测 | ~20MB | [ModelScope: archifancy/AIGlasses_for_navigation](https://www.modelscope.cn/models/archifancy/AIGlasses_for_navigation) |
 | `hand_landmarker.task` | 手部检测 | ~15MB | [MediaPipe Models](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker#models) |
+
+可选：使用 ModelScope CLI 一次性下载到 `model/`：
+```bash
+modelscope download --model archifancy/AIGlasses_for_navigation --local_dir model --include "*.pt" "*.task"
+```
 
 ### 4. 配置 API 密钥
 
@@ -502,5 +507,4 @@ python test_recorder.py
 ## 📄 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
 

@@ -16,6 +16,7 @@ import torch  # 添加这行
 from obstacle_detector_client import ObstacleDetectorClient
 from audio_player import play_voice_text  # 新增
 from crosswalk_awareness import CrosswalkAwarenessMonitor, split_combined_voice  # 斑马线感知
+from font_utils import load_pil_cjk_font
 # 尝试导入 Pillow，用于中文显示
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -2565,18 +2566,11 @@ class BlindPathNavigator:
             bottom_margin = 28
             
             # 计算文字尺寸
+            font = None
             if PIL_AVAILABLE:
                 try:
                     from PIL import Image as PILImage, ImageDraw, ImageFont
-                    # 尝试加载中文字体
-                    font = None
-                    for font_path in ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf"]:
-                        if os.path.exists(font_path):
-                            try:
-                                font = ImageFont.truetype(font_path, font_px)
-                                break
-                            except:
-                                continue
+                    font = load_pil_cjk_font(ImageFont, font_px)
                     if font:
                         bbox = ImageDraw.Draw(PILImage.new('RGB', (1, 1))).textbbox((0, 0), full_text, font=font)
                         tw = max(1, bbox[2] - bbox[0])
@@ -2668,26 +2662,7 @@ class BlindPathNavigator:
             env_scale = float(os.getenv("AIGLASS_PANEL_SCALE", "0.7"))
             base_font_size = max(10, int(round(14 * env_scale)))
             
-            # 尝试多种字体，确保中文显示
-            font = None
-            font_paths = [
-                "C:/Windows/Fonts/msyh.ttc",      # 微软雅黑
-                "C:/Windows/Fonts/simhei.ttf",    # 黑体
-                "C:/Windows/Fonts/simsun.ttc",    # 宋体
-                "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",  # Linux
-                "/System/Library/Fonts/PingFang.ttc",  # macOS
-            ]
-            
-            for font_path in font_paths:
-                try:
-                    if os.path.exists(font_path):
-                        font = ImageFont.truetype(font_path, base_font_size)
-                        break
-                except:
-                    continue
-            
-            if font is None:
-                font = ImageFont.load_default()
+            font = load_pil_cjk_font(ImageFont, base_font_size)
             
             # 绘制文本，使用描边效果
             y_offset = position[1]
@@ -3019,26 +2994,7 @@ class BlindPathNavigator:
             base_size = 24  # 基准字体大小
             font_size = int(base_size * font_scale / 0.6)
             
-            # 尝试加载微软雅黑字体
-            font = None
-            font_paths = [
-                "C:/Windows/Fonts/msyh.ttc",      # 微软雅黑
-                "C:/Windows/Fonts/msyh.ttf",      # 微软雅黑旧版
-                "C:/Windows/Fonts/simhei.ttf",    # 黑体
-                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",  # Linux
-                "/System/Library/Fonts/PingFang.ttc",  # macOS
-            ]
-            
-            for font_path in font_paths:
-                if os.path.exists(font_path):
-                    try:
-                        font = ImageFont.truetype(font_path, font_size)
-                        break
-                    except:
-                        continue
-            
-            if font is None:
-                font = ImageFont.load_default()
+            font = load_pil_cjk_font(ImageFont, font_size)
             
             # 将OpenCV的BGR颜色转换为RGB
             rgb_color = (color[2], color[1], color[0])
@@ -3075,24 +3031,7 @@ class BlindPathNavigator:
             base_font_size = max(8, int(round(16 * env_scale)))
             padding = max(4, int(round(8 * env_scale)))
             
-            # 尝试加载微软雅黑字体
-            font = None
-            font_paths = [
-                "C:/Windows/Fonts/msyh.ttc",      # 微软雅黑
-                "C:/Windows/Fonts/msyh.ttf",      # 微软雅黑旧版
-                "C:/Windows/Fonts/simhei.ttf",    # 黑体
-            ]
-            
-            for font_path in font_paths:
-                if os.path.exists(font_path):
-                    try:
-                        font = ImageFont.truetype(font_path, base_font_size)
-                        break
-                    except:
-                        continue
-            
-            if font is None:
-                font = ImageFont.load_default()
+            font = load_pil_cjk_font(ImageFont, base_font_size)
             
             text_lines = [f"{key}: {value}" for key, value in data.items()]
             text_to_draw = "\n".join(text_lines)

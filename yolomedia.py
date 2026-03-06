@@ -27,6 +27,7 @@ import bridge_io
 import pygame  # 用于播放本地音频文件
 
 from audio_player import play_audio_threadsafe
+from font_utils import find_cjk_font_path, load_pil_cjk_font
 PERF_DEBUG = False        # 打印调试信息（False 关闭）
 HAND_DOWNSCALE = 0.8      # HandLandmarker 的输入缩放 0.5=长宽各减半（≈1/4 像素量）
 HAND_FPS_DIV = 1          # 人手每 2 帧跑一次（1=每帧；2=隔帧；3=每3帧）
@@ -91,9 +92,11 @@ except Exception as e:
     _YOLOE_READY = False
     print(f"[DETECTOR] YOLOE backend not ready: {e}", flush=True)
 
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # ========= 路径参数（按需修改）=========
-YOLO_MODEL_PATH = r'C:\Users\Administrator\Desktop\rebuild1002\model\shoppingbest5.pt'
-HAND_TASK_PATH  = r"C:\Users\Administrator\Desktop\rebuild1002\model\hand_landmarker.task"
+YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", os.path.join(_BASE_DIR, "model", "shoppingbest5.pt"))
+HAND_TASK_PATH  = os.getenv("HAND_TASK_PATH", os.path.join(_BASE_DIR, "model", "hand_landmarker.task"))
 
 # ========= 摄像头 =========
 CAM_INDEX = 0
@@ -143,7 +146,7 @@ YOLO_CORRECTION_IOU_THRESHOLD = 0.2  # IoU阈值，越低越积极矫正
 YOLO_CORRECTION_CONF_THRESHOLD = 0.15  # 置信度阈值，越低检测越敏感
 
 # ========= 方向引导音频路径 =========
-AUDIO_DIR = r"E:\沙粒云\自媒体\2025视频制作\20250925AI眼镜\AI眼镜合并\audio"  # 请修改为实际路径
+AUDIO_DIR = os.getenv("YOLOMEDIA_AUDIO_DIR", os.path.join(_BASE_DIR, "audio"))
 AUDIO_FILES = {
     "向上": os.path.join(AUDIO_DIR, "up.wav"),
     "向下": os.path.join(AUDIO_DIR, "down.wav"),
@@ -252,19 +255,9 @@ def _init_font():
     except Exception:
         _PIL_OK = False
         return
-    candidates = [
-        r"C:\\Windows\\Fonts\\msyh.ttc",
-        r"C:\\Windows\\Fonts\\msyh.ttf",
-        r"C:\\Windows\\Fonts\\simhei.ttf",
-        r"C:\\Windows\\Fonts\\simfang.ttf",
-        r"C:\\Windows\\Fonts\\simsun.ttc",
-        r"C:\\Windows\\Fonts\\simsunb.ttf",
-    ]
-    for p in candidates:
-        if os.path.exists(p):
-            _FONT_PATH = p
-            return
-    _PIL_OK = False
+    _FONT_PATH = find_cjk_font_path()
+    if _FONT_PATH is None:
+        _PIL_OK = False
 _init_font()
 
 def draw_text_cn(img_bgr, text, xy, font_size=20, color=(255,255,255), stroke=None, ui_hint=True):
@@ -287,7 +280,7 @@ def draw_text_cn(img_bgr, text, xy, font_size=20, color=(255,255,255), stroke=No
     if _PIL_OK and _FONT_PATH:
         try:
             from PIL import Image, ImageDraw, ImageFont
-            font_obj = ImageFont.truetype(_FONT_PATH, font_size)
+            font_obj = load_pil_cjk_font(ImageFont, font_size, extra_candidates=[_FONT_PATH])
             # 计算文本尺寸
             bbox = ImageDraw.Draw(Image.new('RGB', (1,1))).textbbox((0,0), text, font=font_obj)
             tw = max(1, bbox[2] - bbox[0])
@@ -713,17 +706,24 @@ def main(headless: bool = False, prompt_name: str = None, stop_event=None):
 
     # Hand Landmarker
     print("[INIT] 初始化 Hand Landmarker...")
+    if not os.path.exists(HAND_TASK_PATH):
+        print(f"[INIT] 缺少 Hand Landmarker 模型文件: {HAND_TASK_PATH}", flush=True)
+        return
     base = BaseOptions(model_asset_path=HAND_TASK_PATH)
-    hand_options = HandLandmarkerOptions(
-        base_options=base,
-        running_mode=VisionRunningMode.LIVE_STREAM,
-        num_hands=1,
-        min_hand_detection_confidence=0.40,
-        min_hand_presence_confidence=0.50,
-        min_tracking_confidence=0.70,
-        result_callback=on_result
-    )
-    landmarker = HandLandmarker.create_from_options(hand_options)
+    try:
+        hand_options = HandLandmarkerOptions(
+            base_options=base,
+            running_mode=VisionRunningMode.LIVE_STREAM,
+            num_hands=1,
+            min_hand_detection_confidence=0.40,
+            min_hand_presence_confidence=0.50,
+            min_tracking_confidence=0.70,
+            result_callback=on_result
+        )
+        landmarker = HandLandmarker.create_from_options(hand_options)
+    except Exception as e:
+        print(f"[INIT] Hand Landmarker 初始化失败: {e}", flush=True)
+        return
 
     W = None
     H = None

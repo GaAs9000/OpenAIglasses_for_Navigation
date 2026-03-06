@@ -14,6 +14,7 @@ from audio_compressor import compressed_audio_cache, AudioCompressor
 # 导入录制器（避免循环导入，在需要时动态导入）
 _recorder_imported = False
 _sync_recorder = None
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def _get_recorder():
     """延迟导入录制器"""
@@ -29,11 +30,11 @@ def _get_recorder():
     return _sync_recorder
 
 # 兼容旧工程中的示例音频（保留）
-AUDIO_BASE_DIR = r"C:\Users\Administrator\Desktop\rebuild1002\music"
+AUDIO_BASE_DIR = os.getenv("AUDIO_BASE_DIR", os.path.join(_BASE_DIR, "music"))
 
 # 新增：voice 目录与映射表
 # 使用脚本所在目录的 voice 文件夹，避免工作目录问题
-VOICE_DIR = os.getenv("VOICE_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "voice"))
+VOICE_DIR = os.getenv("VOICE_DIR", os.path.join(_BASE_DIR, "voice"))
 VOICE_MAP_FILE = os.path.join(VOICE_DIR, "map.zh-CN.json")
 
 # 音频文件映射（将合并 voice 映射）
