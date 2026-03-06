@@ -264,16 +264,21 @@ class CrossStreetNavigator:
         # 【新增】打印检测间隔配置
         logger.info(f"[CROSS_STREET] 斑马线检测间隔: 每{self.CROSSWALK_DETECTION_INTERVAL}帧")
 
-        # 确保模型在 GPU 上
-        if self.seg_model and torch.cuda.is_available():
+        # 确保模型在最佳设备上（cuda > mps > cpu）
+        _device = (
+            "cuda" if torch.cuda.is_available()
+            else "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+            else None
+        )
+        if self.seg_model and _device:
             try:
                 if hasattr(self.seg_model, 'model') and hasattr(self.seg_model.model, 'to'):
-                    self.seg_model.model.to('cuda')
+                    self.seg_model.model.to(_device)
                 elif hasattr(self.seg_model, 'to'):
-                    self.seg_model.to('cuda')
-                logger.info("[CROSS_STREET] 模型已移至 GPU")
+                    self.seg_model.to(_device)
+                logger.info(f"[CROSS_STREET] 模型已移至 {_device}")
             except Exception as e:
-                logger.warning(f"[CROSS_STREET] 无法将模型移至 GPU: {e}")
+                logger.warning(f"[CROSS_STREET] 无法将模型移至 {_device}: {e}")
 
     def reset(self):
         """重置状态"""

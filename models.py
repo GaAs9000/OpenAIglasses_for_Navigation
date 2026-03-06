@@ -22,10 +22,23 @@ logger = logging.getLogger(__name__)
 # ==========================================================
 # 1. 全局设备与并发控制 (统一管理)
 # ==========================================================
-DEVICE = os.getenv("AIGLASS_DEVICE", "cuda:0")
-if DEVICE.startswith("cuda") and not torch.cuda.is_available():
-    logger.warning(f"AIGLASS_DEVICE={DEVICE} 但未检测到 CUDA，将回退到 CPU")
-    DEVICE = "cpu"
+def _resolve_device(env_key="AIGLASS_DEVICE", default="auto"):
+    requested = os.getenv(env_key, default).lower()
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return "cuda:0"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    if requested.startswith("cuda") and not torch.cuda.is_available():
+        logger.warning(f"{env_key}={requested} 但未检测到 CUDA，自动回退")
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    return requested
+
+
+DEVICE = _resolve_device()
 IS_CUDA = DEVICE.startswith("cuda")
 
 # AMP (自动混合精度) 配置

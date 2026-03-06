@@ -21,6 +21,7 @@ model/*.onnx
 recordings/
 *.avi
 *.wav
+mobileclip_blt.ts
 
 # ---- IDE ----
 .vscode/

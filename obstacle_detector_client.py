@@ -11,34 +11,51 @@ from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# --- GPU/CPU & AMP 配置 (从 blindpath 工作流迁移而来，保持一致) ---
-DEVICE = os.getenv("AIGLASS_DEVICE", "cuda:0")
-if DEVICE.startswith("cuda") and not torch.cuda.is_available():
-    logger.warning(f"AIGLASS_DEVICE={DEVICE} 但未检测到 CUDA，将回退到 CPU")
-    DEVICE = "cpu"
-IS_CUDA = DEVICE.startswith("cuda")
+# --- 设备自适应: cuda > mps > cpu ---
+def _resolve_device(env_key="AIGLASS_DEVICE", default="auto"):
+    """根据环境变量和硬件自动选择最佳推理设备"""
+    requested = os.getenv(env_key, default).lower()
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return "cuda:0"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    if requested.startswith("cuda") and not torch.cuda.is_available():
+        logger.warning(f"{env_key}={requested} 但未检测到 CUDA，自动回退")
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    return requested
 
+DEVICE = _resolve_device()
+IS_CUDA = DEVICE.startswith("cuda")
+IS_MPS = DEVICE == "mps"
+logger.info(f"[obstacle_detector] 推理设备: {DEVICE}")
+
+# --- AMP 配置（仅 CUDA 支持 autocast，MPS/CPU 跳过）---
 AMP_POLICY = os.getenv("AIGLASS_AMP", "bf16").lower()
 if AMP_POLICY not in ("bf16", "fp16", "off"):
     AMP_POLICY = "bf16"
-AMP_DTYPE = torch.bfloat16 if AMP_POLICY == "bf16" else (torch.float16 if AMP_POLICY == "fp16" else None)
+AMP_DTYPE = (torch.bfloat16 if AMP_POLICY == "bf16" else
+             (torch.float16 if AMP_POLICY == "fp16" else None)) if IS_CUDA else None
 
-# --- GPU 并发限流 (从 blindpath 工作流迁移而来，保持一致) ---
+# --- GPU 并发限流 ---
 GPU_SLOTS = int(os.getenv("AIGLASS_GPU_SLOTS", "2"))
 _gpu_slots = Semaphore(GPU_SLOTS)
 
-try:
-    torch.backends.cudnn.benchmark = True
-except Exception:
-    pass
+if IS_CUDA:
+    try:
+        torch.backends.cudnn.benchmark = True
+    except Exception:
+        pass
 
 
 @contextmanager
 def gpu_infer_slot():
-    """统一管理 GPU 并发限流 + inference_mode + AMP autocast"""
+    """统一管理并发限流 + inference_mode + AMP autocast（仅 CUDA）"""
     with _gpu_slots:
-        if IS_CUDA and AMP_POLICY != "off":
-            # 新式接口：torch.amp.autocast(device_type='cuda', dtype=...)
+        if IS_CUDA and AMP_POLICY != "off" and AMP_DTYPE is not None:
             with torch.inference_mode(), torch.amp.autocast(device_type='cuda', dtype=AMP_DTYPE):
                 yield
         else:

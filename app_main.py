@@ -128,17 +128,21 @@ def load_navigation_models():
             try:
                 print(f"[NAVIGATION] 模型文件存在，开始加载...")
                 yolo_seg_model = YOLO(seg_model_path)
+                # 设备自适应: cuda > mps > cpu
                 if torch.cuda.is_available():
-                    yolo_seg_model.to("cuda")
-                    print(f"[NAVIGATION] 盲道分割模型加载成功并放到GPU: {yolo_seg_model.device}")
+                    _dev = "cuda"
+                elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                    _dev = "mps"
                 else:
-                    print("[NAVIGATION] CUDA不可用，模型仍在CPU")
+                    _dev = "cpu"
+                yolo_seg_model.to(_dev)
+                print(f"[NAVIGATION] 盲道分割模型加载成功，设备: {_dev}")
 
                 # 测试模型是否能正常运行
                 test_img = np.zeros((640, 640, 3), dtype=np.uint8)
                 yolo_seg_model.predict(
                     test_img,
-                    device="cuda" if torch.cuda.is_available() else "cpu",
+                    device=_dev,
                     verbose=False
                 )
                 print(f"[NAVIGATION] 模型测试成功，支持的类别数: {len(yolo_seg_model.names) if hasattr(yolo_seg_model, 'names') else '未知'}")
