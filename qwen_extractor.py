@@ -1,8 +1,12 @@
 # qwen_extractor.py
 # -*- coding: utf-8 -*-
-from typing import List, Tuple
+from typing import Optional, Tuple
 import os
+import logging
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
+_MISSING_KEY_WARNED = False
 
 # —— 本地优先映射（可随时扩充/改名）——
 LOCAL_CN2EN = {
@@ -17,10 +21,16 @@ LOCAL_CN2EN = {
     "雪碧": "sprite",
 }
 
-def _make_client() -> OpenAI:
+def _make_client() -> Optional[OpenAI]:
     # 复用你百炼兼容端点；支持从环境变量读取
+    global _MISSING_KEY_WARNED
     base_url = os.getenv("DASHSCOPE_COMPAT_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    api_key  = "sk-a9440db694924559ae4ebdc2023d2b9a"
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        if not _MISSING_KEY_WARNED:
+            logger.warning("未设置 DASHSCOPE_API_KEY，Qwen 提取器将回退到本地规则")
+            _MISSING_KEY_WARNED = True
+        return None
     return OpenAI(api_key=api_key, base_url=base_url)
 
 PROMPT_SYS = (
@@ -43,9 +53,11 @@ def extract_english_label(query_cn: str) -> Tuple[str, str]:
         if k in q:
             return v, "local"
 
-    # 调用 Qwen Turbo（兼容 Chat Completions）
+    # 调用 Qwen Turbo（兼容 Chat Completions）；缺少 key 或请求失败时回退默认标签
     try:
         client = _make_client()
+        if client is None:
+            return "bottle", "fallback"
         msgs = [
             {"role": "system", "content": PROMPT_SYS},
             {"role": "user",   "content": query_cn.strip()},
@@ -60,5 +72,6 @@ def extract_english_label(query_cn: str) -> Tuple[str, str]:
         label = label.replace(".", "").replace(",", "").replace("  ", " ").strip()
         # 兜底：空就回 'bottle'
         return (label or "bottle"), "qwen"
-    except Exception:
+    except Exception as exc:
+        logger.warning("Qwen 提取失败，回退默认标签: %s", exc)
         return "bottle", "fallback"

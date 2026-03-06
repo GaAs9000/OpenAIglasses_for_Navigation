@@ -4,6 +4,12 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 import os
 import cv2
 import numpy as np
+import logging
+
+try:
+    import torch
+except Exception:
+    torch = None
 
 # 兼容 YOLOE / YOLO
 try:
@@ -11,14 +17,26 @@ try:
 except Exception:
     from ultralytics import YOLO as _MODEL
 
-DEFAULT_MODEL_PATH = os.getenv("YOLOE_MODEL_PATH", r"C:\Users\Administrator\Desktop\rebuild1002\model\yoloe-11l-seg.pt")
+logger = logging.getLogger(__name__)
+
+DEFAULT_MODEL_PATH = os.getenv("YOLOE_MODEL_PATH", os.path.join("model", "yoloe-11l-seg.pt"))
 TRACKER_CFG        = os.getenv("YOLO_TRACKER_YAML", "bytetrack.yaml")
 
 class YoloEBackend:
     def __init__(self, model_path: Optional[str] = None, device: Optional[Union[str, int]] = None):
-        self.model = _MODEL(model_path or DEFAULT_MODEL_PATH)
-        self.model.to("cuda")
+        resolved_model_path = model_path or DEFAULT_MODEL_PATH
+        if not os.path.exists(resolved_model_path):
+            raise FileNotFoundError(f"未找到 YOLOE 模型文件: {resolved_model_path}")
+
+        self.model = _MODEL(resolved_model_path)
+        if device is None:
+            device = "cuda" if (torch is not None and torch.cuda.is_available()) else "cpu"
         self.device = device
+
+        try:
+            self.model.to(self.device)
+        except Exception as e:
+            logger.warning(f"模型迁移到设备 {self.device} 失败，保持默认设备: {e}")
 
     def set_text_classes(self, names: List[str]):
         # YOLOE 文本提示：与你模板一致
